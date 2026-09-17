@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+:root {
+    --background: #f8fafc;
+    --foreground: #1f2937;
+}
+
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --font-sans: var(--font-geist-sans);
+    --font-mono: var(--font-geist-mono);
+}
+
+/* Global body styling */
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: Arial, Helvetica, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Improve form field visibility */
+input,
+textarea,
+select {
+    color: #1f2937;
+    background-color: #ffffff;
+}
+
+/* Placeholder styling */
+input::placeholder,
+textarea::placeholder {
+    color: #6b7280;
+    opacity: 1;
+}
+
+/* Consistent focus styling */
+input:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+}
+
+/* Better button interaction */
+button {
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: not-allowed;
+}
+
+/* Better link interaction */
+a {
+    transition: color 0.2s ease-in-out;
+}
+
+/* Text selection styling */
+::selection {
+    background-color: #bfdbfe;
+    color: #1e3a8a;
+}
+
+/* Improve scrollbar appearance */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
