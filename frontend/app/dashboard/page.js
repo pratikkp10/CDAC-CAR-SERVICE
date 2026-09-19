@@ -1,85 +1,259 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+
+const API_URL = "http://localhost:5000";
 
 export default function DashboardPage() {
-    const [user, setUser] = useState(null);
+    const [bookings, setBookings] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
 
     useEffect(() => {
-        const storedUser = localStorage.getItem("user");
+        const fetchBookings = async () => {
+            try {
+                const token = localStorage.getItem("token");
 
-        if (storedUser) {
-            setUser(JSON.parse(storedUser));
-        }
+                const response = await fetch(`${API_URL}/api/bookings`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    setError(data.message || "Unable to load bookings.");
+                    return;
+                }
+
+                setBookings(data.bookings || []);
+            } catch (error) {
+                console.error("Error fetching bookings:", error);
+                setError("Unable to connect to the server.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchBookings();
     }, []);
 
+    const totalBookings = bookings.length;
+
+    const pendingBookings = bookings.filter(
+        (booking) => booking.status === "pending"
+    ).length;
+
+    const completedBookings = bookings.filter(
+        (booking) => booking.status === "completed"
+    ).length;
+
+    const cancelledBookings = bookings.filter(
+        (booking) => booking.status === "cancelled"
+    ).length;
+
+    const statistics = [
+        {
+            title: "Total Bookings",
+            value: totalBookings,
+            icon: "📅",
+            description: "All your service bookings",
+            color: "bg-blue-100",
+            textColor: "text-blue-700",
+        },
+        {
+            title: "Pending",
+            value: pendingBookings,
+            icon: "⏳",
+            description: "Bookings awaiting service",
+            color: "bg-amber-100",
+            textColor: "text-amber-700",
+        },
+        {
+            title: "Completed",
+            value: completedBookings,
+            icon: "✅",
+            description: "Successfully completed services",
+            color: "bg-emerald-100",
+            textColor: "text-emerald-700",
+        },
+        {
+            title: "Cancelled",
+            value: cancelledBookings,
+            icon: "✕",
+            description: "Cancelled service bookings",
+            color: "bg-red-100",
+            textColor: "text-red-700",
+        },
+    ];
+
+    const quickActions = [
+        {
+            title: "My Bookings",
+            description: "View and manage your service appointments.",
+            icon: "📅",
+            href: "/dashboard/bookings",
+            buttonText: "View Bookings",
+        },
+        {
+            title: "My Cars",
+            description: "Add or manage your registered vehicles.",
+            icon: "🚗",
+            href: "/dashboard/cars",
+            buttonText: "Manage Cars",
+        },
+        {
+            title: "Browse Services",
+            description: "Explore available maintenance services.",
+            icon: "🔧",
+            href: "/services",
+            buttonText: "Explore Services",
+        },
+        {
+            title: "My Profile",
+            description: "Update your personal information and password.",
+            icon: "👤",
+            href: "/profile",
+            buttonText: "View Profile",
+        },
+    ];
+
     return (
-        <main className="min-h-screen bg-gray-100 p-8">
-            <div className="mx-auto max-w-5xl">
+        <main className="min-h-screen bg-slate-100">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
 
-                <h1 className="text-3xl font-bold text-gray-800">
-                    Car Service Dashboard
-                </h1>
-
-                {user && (
-                    <p className="mt-2 text-gray-600">
-                        Welcome, {user.name}!
+                {/* Welcome Banner */}
+                <section className="mb-8 rounded-2xl bg-gradient-to-r from-slate-900 to-blue-900 p-6 text-white shadow-lg sm:p-8">
+                    <p className="text-sm font-medium uppercase tracking-wider text-blue-200">
+                        Customer Portal
                     </p>
+
+                    <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">
+                        Customer Dashboard
+                    </h1>
+
+                    <p className="mt-3 max-w-2xl text-sm text-slate-300 sm:text-base">
+                        Welcome to your Online Car Service Station dashboard.
+                        Manage your vehicles, bookings, and services easily.
+                    </p>
+
+                    <Link
+                        href="/services"
+                        className="mt-6 inline-flex rounded-lg bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-blue-50"
+                    >
+                        Book a Service →
+                    </Link>
+                </section>
+
+                {/* Error Message */}
+                {error && (
+                    <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {error}
+                    </div>
                 )}
 
-                <div className="mt-8 grid gap-6 md:grid-cols-3">
+                {/* Statistics */}
+                <section className="mb-10">
+                    <div className="mb-4">
+                        <h2 className="text-2xl font-bold text-slate-800">
+                            Booking Overview
+                        </h2>
 
-                    {/* My Cars */}
-
-                    <a
-                        href="/dashboard/cars"
-                        className="block rounded-lg bg-white p-6 shadow transition hover:shadow-lg"
-                    >
-                        <h2 className="text-xl font-semibold text-gray-800">
-    My Cars
-</h2>
-
-                        <p className="mt-2 text-gray-600">
-                            Manage your registered cars.
+                        <p className="mt-1 text-sm text-slate-500">
+                            Track the current status of your service bookings.
                         </p>
-                    </a>
+                    </div>
 
+                    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+                        {statistics.map((statistic) => (
+                            <div
+                                key={statistic.title}
+                                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg"
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-500">
+                                            {statistic.title}
+                                        </p>
 
-                    {/* Services */}
+                                        <h3
+                                            className={`mt-3 text-4xl font-bold ${statistic.textColor}`}
+                                        >
+                                            {loading ? (
+                                                <span className="inline-block h-10 w-12 animate-pulse rounded bg-slate-200" />
+                                            ) : (
+                                                statistic.value
+                                            )}
+                                        </h3>
+                                    </div>
 
-                    <a
-                        href="/services"
-                        className="block rounded-lg bg-white p-6 shadow transition hover:shadow-lg"
-                    >
-                        <h2 className="text-xl font-semibold text-gray-800">
-    Services
-</h2>
+                                    <div
+                                        className={`flex h-14 w-14 items-center justify-center rounded-2xl text-3xl ${statistic.color}`}
+                                    >
+                                        {statistic.icon}
+                                    </div>
+                                </div>
 
-                        <p className="mt-2 text-gray-600">
-                            View available car services.
+                                <p className="mt-4 text-xs leading-5 text-slate-500">
+                                    {statistic.description}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
+                {/* Quick Actions */}
+                <section>
+                    <div className="mb-5">
+                        <h2 className="text-2xl font-bold text-slate-800">
+                            Quick Actions
+                        </h2>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                            Access your most-used customer features.
                         </p>
-                    </a>
+                    </div>
 
+                    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+                        {quickActions.map((action) => (
+                            <Link
+                                href={action.href}
+                                key={action.title}
+                                className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-blue-300 hover:shadow-xl"
+                            >
+                                <div className="flex items-center justify-between">
+                                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-3xl transition group-hover:bg-blue-100">
+                                        {action.icon}
+                                    </div>
 
-                    {/* My Bookings */}
+                                    <span className="text-2xl text-slate-300 transition group-hover:text-blue-500">
+                                        →
+                                    </span>
+                                </div>
 
-                    {/* My Bookings */}
+                                <h3 className="mt-5 text-xl font-bold text-slate-800">
+                                    {action.title}
+                                </h3>
 
-<a
-    href="/dashboard/bookings"
-    className="block rounded-lg bg-white p-6 shadow transition hover:shadow-lg"
->
-    <h2 className="text-xl font-semibold text-gray-800">
-        My Bookings
-    </h2>
+                                <p className="mt-2 min-h-12 text-sm leading-6 text-slate-500">
+                                    {action.description}
+                                </p>
 
-    <p className="mt-2 text-gray-600">
-        View and manage your bookings.
-    </p>
-</a>
+                                <div className="mt-5 inline-flex rounded-lg bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition group-hover:bg-blue-600 group-hover:text-white">
+                                    {action.buttonText}
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                </section>
 
+                {/* Information Notice */}
+                <div className="mt-10 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
+                    <strong>Tip:</strong> Keep your vehicle information updated
+                    to make future service bookings easier.
                 </div>
-
             </div>
         </main>
     );

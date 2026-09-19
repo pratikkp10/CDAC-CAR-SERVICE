@@ -2,33 +2,54 @@
 
 import { useEffect, useState } from "react";
 
+const API_URL = "http://localhost:5000";
+
+const initialForm = {
+    name: "",
+    description: "",
+    price: "",
+};
+
 export default function AdminServicesPage() {
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
 
-    const [name, setName] = useState("");
-    const [description, setDescription] = useState("");
-    const [price, setPrice] = useState("");
-
+    const [form, setForm] = useState(initialForm);
     const [editingService, setEditingService] = useState(null);
 
-    const fetchServices = async () => {
-        try {
-            const response = await fetch(
-                "http://localhost:5000/api/services"
-            );
+    const [error, setError] = useState("");
 
+    const getToken = () => localStorage.getItem("token");
+
+    const getHeaders = () => ({
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getToken()}`,
+    });
+
+    // Fetch services
+    const fetchServices = async () => {
+        setLoading(true);
+        setError("");
+
+        try {
+            const response = await fetch(`${API_URL}/api/services`);
             const data = await response.json();
 
             if (!response.ok) {
-                alert(data.message || "Unable to fetch services");
-                return;
+                throw new Error(
+                    data.message || "Unable to fetch services"
+                );
             }
 
-            setServices(data.services || data);
-        } catch (error) {
-            console.error("Error fetching services:", error);
-            alert("Unable to connect to server");
+            const serviceList = Array.isArray(data)
+                ? data
+                : data.services || data.data || [];
+
+            setServices(serviceList);
+        } catch (err) {
+            console.error("Error fetching services:", err);
+            setError(err.message || "Unable to connect to server");
         } finally {
             setLoading(false);
         }
@@ -38,231 +59,257 @@ export default function AdminServicesPage() {
         fetchServices();
     }, []);
 
+    // Handle form changes
+    const handleChange = (event) => {
+        const { name, value } = event.target;
+
+        setForm((previous) => ({
+            ...previous,
+            [name]: value,
+        }));
+    };
+
+    // Clear form
     const clearForm = () => {
-        setName("");
-        setDescription("");
-        setPrice("");
+        setForm({ ...initialForm });
         setEditingService(null);
+        setError("");
     };
 
-    const handleAddService = async (e) => {
-        e.preventDefault();
+    // Validate form
+    const validateForm = () => {
+        if (!form.name.trim()) {
+            alert("Service name is required.");
+            return false;
+        }
+
+        if (
+            form.price === "" ||
+            Number.isNaN(Number(form.price)) ||
+            Number(form.price) <= 0
+        ) {
+            alert("Please enter a valid price greater than zero.");
+            return false;
+        }
+
+        return true;
+    };
+
+    // Add or update service
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+
+        if (!validateForm()) {
+            return;
+        }
+
+        setSaving(true);
 
         try {
-            const token = localStorage.getItem("token");
+            const isEditing = editingService !== null;
 
-            const response = await fetch(
-                "http://localhost:5000/api/admin/services",
-                {
-                    method: "POST",
+            const url = isEditing
+                ? `${API_URL}/api/admin/services/${editingService.id}`
+                : `${API_URL}/api/admin/services`;
 
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`
-                    },
-
-                    body: JSON.stringify({
-                        name,
-                        description,
-                        price
-                    })
-                }
-            );
+            const response = await fetch(url, {
+                method: isEditing ? "PUT" : "POST",
+                headers: getHeaders(),
+                body: JSON.stringify({
+                    name: form.name.trim(),
+                    description: form.description.trim(),
+                    price: Number(form.price),
+                }),
+            });
 
             const data = await response.json();
 
             if (!response.ok) {
-                alert(data.message || "Unable to add service");
-                return;
+                throw new Error(
+                    data.message || "Unable to save service"
+                );
             }
 
-            alert("Service added successfully!");
-
-            clearForm();
-            fetchServices();
-
-        } catch (error) {
-            console.error("Error adding service:", error);
-            alert("Unable to connect to server");
-        }
-    };
-
-    const handleUpdateService = async (e) => {
-        e.preventDefault();
-
-        try {
-            const token = localStorage.getItem("token");
-
-            const response = await fetch(
-                `http://localhost:5000/api/admin/services/${editingService.id}`,
-                {
-                    method: "PUT",
-
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`
-                    },
-
-                    body: JSON.stringify({
-                        name,
-                        description,
-                        price
-                    })
-                }
+            alert(
+                isEditing
+                    ? "Service updated successfully."
+                    : "Service added successfully."
             );
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                alert(data.message || "Unable to update service");
-                return;
-            }
-
-            alert("Service updated successfully!");
-
             clearForm();
-            fetchServices();
-
-        } catch (error) {
-            console.error("Error updating service:", error);
-            alert("Unable to connect to server");
+            await fetchServices();
+        } catch (err) {
+            console.error("Error saving service:", err);
+            alert(err.message || "Unable to connect to server");
+        } finally {
+            setSaving(false);
         }
     };
 
-    const handleDeleteService = async (serviceId) => {
-        const confirmDelete = window.confirm(
+    // Start editing
+    const handleEdit = (service) => {
+        setEditingService(service);
+
+        setForm({
+            name: service.name || "",
+            description: service.description || "",
+            price: service.price ?? service.basePrice ?? "",
+        });
+
+        window.scrollTo({
+            top: 0,
+            behavior: "smooth",
+        });
+    };
+
+    // Delete service
+    const handleDelete = async (serviceId) => {
+        const confirmed = window.confirm(
             "Are you sure you want to delete this service?"
         );
 
-        if (!confirmDelete) {
+        if (!confirmed) {
             return;
         }
 
         try {
-            const token = localStorage.getItem("token");
-
             const response = await fetch(
-                `http://localhost:5000/api/admin/services/${serviceId}`,
+                `${API_URL}/api/admin/services/${serviceId}`,
                 {
                     method: "DELETE",
-
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
+                    headers: getHeaders(),
                 }
             );
 
             const data = await response.json();
 
             if (!response.ok) {
-                alert(data.message || "Unable to delete service");
-                return;
+                throw new Error(
+                    data.message ||
+                        "Unable to delete service. It may be used in existing bookings."
+                );
             }
 
-            alert("Service deleted successfully!");
+            alert("Service deleted successfully.");
 
-            fetchServices();
+            await fetchServices();
+        } catch (err) {
+            console.error("Error deleting service:", err);
 
-        } catch (error) {
-            console.error("Error deleting service:", error);
-            alert("Unable to connect to server");
+            alert(
+                err.message ||
+                    "Unable to delete service. It may be linked to existing bookings."
+            );
         }
     };
 
-    const startEditing = (service) => {
-        setEditingService(service);
-        setName(service.name);
-        setDescription(service.description || "");
-        setPrice(service.price);
-    };
-
     return (
-        <main className="min-h-screen bg-gray-100 p-6">
+        <main className="min-h-screen bg-gray-100 p-6 md:p-8">
             <div className="mx-auto max-w-7xl">
+                {/* Page Header */}
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-gray-800">
+                        Manage Services
+                    </h1>
 
-                <h1 className="text-3xl font-bold text-gray-800">
-                    Manage Services
-                </h1>
+                    <p className="mt-2 text-gray-600">
+                        Add, update and manage available car services.
+                    </p>
+                </div>
 
-                <p className="mt-2 text-gray-600">
-                    Add, edit, and manage available car services.
-                </p>
+                {/* Error Message */}
+                {error && (
+                    <div className="mb-6 rounded-lg bg-red-100 p-4 text-red-700">
+                        {error}
+                    </div>
+                )}
 
-                <div className="mt-8 rounded-xl bg-white p-6 shadow">
+                {/* Add/Edit Service Form */}
+                <section className="mb-8 rounded-xl bg-white p-6 shadow">
+                    <div className="mb-5 flex items-center justify-between">
+                        <h2 className="text-xl font-semibold text-gray-800">
+                            {editingService
+                                ? "Edit Service"
+                                : "Add New Service"}
+                        </h2>
 
-                    <h2 className="text-xl font-semibold text-gray-800">
-                        {editingService
-                            ? "Edit Service"
-                            : "Add New Service"}
-                    </h2>
+                        {editingService && (
+                            <button
+                                type="button"
+                                onClick={clearForm}
+                                className="rounded-md bg-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-300"
+                            >
+                                Cancel Edit
+                            </button>
+                        )}
+                    </div>
 
                     <form
-                        onSubmit={
-                            editingService
-                                ? handleUpdateService
-                                : handleAddService
-                        }
-                        className="mt-5 grid gap-4"
+                        onSubmit={handleSubmit}
+                        className="grid gap-4"
                     >
-
+                        {/* Service Name */}
                         <div>
-                            <label className="block text-gray-700">
+                            <label className="block font-medium text-gray-700">
                                 Service Name
                             </label>
 
                             <input
                                 type="text"
-                                value={name}
-                                onChange={(e) =>
-                                    setName(e.target.value)
-                                }
+                                name="name"
+                                value={form.name}
+                                onChange={handleChange}
                                 placeholder="Enter service name"
                                 className="mt-2 w-full rounded-md border border-gray-300 p-3 text-gray-800"
                                 required
                             />
                         </div>
 
+                        {/* Description */}
                         <div>
-                            <label className="block text-gray-700">
+                            <label className="block font-medium text-gray-700">
                                 Description
                             </label>
 
                             <textarea
-                                value={description}
-                                onChange={(e) =>
-                                    setDescription(e.target.value)
-                                }
+                                name="description"
+                                value={form.description}
+                                onChange={handleChange}
                                 placeholder="Enter service description"
                                 rows="3"
                                 className="mt-2 w-full rounded-md border border-gray-300 p-3 text-gray-800"
                             />
                         </div>
 
+                        {/* Price */}
                         <div>
-                            <label className="block text-gray-700">
-                                Price
+                            <label className="block font-medium text-gray-700">
+                                Service Price
                             </label>
 
                             <input
                                 type="number"
-                                value={price}
-                                onChange={(e) =>
-                                    setPrice(e.target.value)
-                                }
-                                placeholder="Enter price"
+                                name="price"
+                                value={form.price}
+                                onChange={handleChange}
+                                placeholder="Enter service price"
                                 min="1"
+                                step="0.01"
                                 className="mt-2 w-full rounded-md border border-gray-300 p-3 text-gray-800"
                                 required
                             />
                         </div>
 
+                        {/* Buttons */}
                         <div className="flex gap-3">
-
                             <button
                                 type="submit"
-                                className="flex-1 rounded-md bg-blue-600 py-3 text-white hover:bg-blue-700"
+                                disabled={saving}
+                                className="flex-1 rounded-md bg-blue-600 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
                             >
-                                {editingService
+                                {saving
+                                    ? "Saving..."
+                                    : editingService
                                     ? "Update Service"
                                     : "Add Service"}
                             </button>
@@ -276,15 +323,12 @@ export default function AdminServicesPage() {
                                     Cancel
                                 </button>
                             )}
-
                         </div>
-
                     </form>
+                </section>
 
-                </div>
-
-                <div className="mt-8 rounded-xl bg-white p-6 shadow">
-
+                {/* Services Table */}
+                <section className="rounded-xl bg-white p-6 shadow">
                     <h2 className="text-xl font-semibold text-gray-800">
                         Existing Services
                     </h2>
@@ -299,11 +343,9 @@ export default function AdminServicesPage() {
                         </p>
                     ) : (
                         <div className="mt-5 overflow-x-auto">
-
-                            <table className="w-full min-w-[800px] border-collapse">
-
+                            <table className="w-full min-w-[850px] border-collapse">
                                 <thead>
-                                    <tr className="border-b text-left">
+                                    <tr className="border-b bg-gray-50 text-left">
                                         <th className="p-3 text-gray-700">
                                             ID
                                         </th>
@@ -321,71 +363,98 @@ export default function AdminServicesPage() {
                                         </th>
 
                                         <th className="p-3 text-gray-700">
+                                            Status
+                                        </th>
+
+                                        <th className="p-3 text-gray-700">
                                             Actions
                                         </th>
                                     </tr>
                                 </thead>
 
                                 <tbody>
-                                    {services.map((service) => (
-                                        <tr
-                                            key={service.id}
-                                            className="border-b last:border-b-0"
-                                        >
-                                            <td className="p-3 text-gray-600">
-                                                {service.id}
-                                            </td>
+                                    {services.map((service) => {
+                                        const servicePrice =
+                                            service.price ??
+                                            service.basePrice ??
+                                            0;
 
-                                            <td className="p-3 font-medium text-gray-800">
-                                                {service.name}
-                                            </td>
+                                        const isActive =
+                                            service.isActive === undefined
+                                                ? true
+                                                : Boolean(service.isActive);
 
-                                            <td className="p-3 text-gray-600">
-                                                {service.description}
-                                            </td>
+                                        return (
+                                            <tr
+                                                key={service.id}
+                                                className="border-b last:border-b-0"
+                                            >
+                                                <td className="p-3 text-gray-700">
+                                                    {service.id}
+                                                </td>
 
-                                            <td className="p-3 text-gray-800">
-                                                ₹{service.price}
-                                            </td>
+                                                <td className="p-3 font-medium text-gray-800">
+                                                    {service.name}
+                                                </td>
 
-                                            <td className="p-3">
-                                                <div className="flex gap-2">
+                                                <td className="p-3 text-gray-600">
+                                                    {service.description ||
+                                                        "N/A"}
+                                                </td>
 
-                                                    <button
-                                                        onClick={() =>
-                                                            startEditing(
-                                                                service
-                                                            )
-                                                        }
-                                                        className="rounded-md bg-yellow-500 px-4 py-2 text-white hover:bg-yellow-600"
+                                                <td className="p-3 text-gray-800">
+                                                    ₹{servicePrice}
+                                                </td>
+
+                                                <td className="p-3">
+                                                    <span
+                                                        className={`rounded-full px-3 py-1 text-sm ${
+                                                            isActive
+                                                                ? "bg-green-100 text-green-700"
+                                                                : "bg-red-100 text-red-700"
+                                                        }`}
                                                     >
-                                                        Edit
-                                                    </button>
+                                                        {isActive
+                                                            ? "Active"
+                                                            : "Inactive"}
+                                                    </span>
+                                                </td>
 
-                                                    <button
-                                                        onClick={() =>
-                                                            handleDeleteService(
-                                                                service.id
-                                                            )
-                                                        }
-                                                        className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-                                                    >
-                                                        Delete
-                                                    </button>
+                                                <td className="p-3">
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                handleEdit(
+                                                                    service
+                                                                )
+                                                            }
+                                                            className="rounded-md bg-yellow-500 px-4 py-2 text-white hover:bg-yellow-600"
+                                                        >
+                                                            Edit
+                                                        </button>
 
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                handleDelete(
+                                                                    service.id
+                                                                )
+                                                            }
+                                                            className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
-
                             </table>
-
                         </div>
                     )}
-
-                </div>
-
+                </section>
             </div>
         </main>
     );

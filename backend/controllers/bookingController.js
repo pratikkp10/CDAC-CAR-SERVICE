@@ -1,75 +1,145 @@
 const db = require("../config/db");
 
 const createBooking = (req, res) => {
-    const { car_id, service_id, booking_date } = req.body;
+    const {
+        car_id,
+        service_id,
+        stationId,
+        booking_date
+    } = req.body;
 
-    if (!car_id || !service_id || !booking_date) {
+    if (!car_id || !service_id || !stationId || !booking_date) {
         return res.status(400).json({
-            message: "Car, service and booking date are required"
+            message: "Car, service, station and booking date are required"
         });
     }
 
     const user_id = req.user.id;
 
-    const sql = `
-        INSERT INTO bookings
-        (user_id, car_id, service_id, booking_date)
-        VALUES (?, ?, ?, ?)
+    // Verify that the selected car belongs to the logged-in user
+    const carOwnershipSql = `
+        SELECT id
+        FROM cars
+        WHERE id = ? AND user_id = ?
     `;
 
     db.query(
-        sql,
-        [user_id, car_id, service_id, booking_date],
-        (err, result) => {
-            if (err) {
+        carOwnershipSql,
+        [car_id, user_id],
+        (carError, carResults) => {
+            if (carError) {
+                console.error(
+                    "Error verifying car ownership:",
+                    carError
+                );
+
                 return res.status(500).json({
-                    message: "Error creating booking"
+                    message: "Error verifying car ownership"
                 });
             }
 
-            res.status(201).json({
-                message: "Booking created successfully",
-                bookingId: result.insertId
-            });
+            if (carResults.length === 0) {
+                return res.status(403).json({
+                    message: "You can only book a service for your own car"
+                });
+            }
+
+            // Verify that the selected service exists
+            const serviceSql = `
+                SELECT id
+                FROM services
+                WHERE id = ?
+            `;
+
+            db.query(
+                serviceSql,
+                [service_id],
+                (serviceError, serviceResults) => {
+                    if (serviceError) {
+                        return res.status(500).json({
+                            message: "Error verifying service"
+                        });
+                    }
+
+                    if (serviceResults.length === 0) {
+                        return res.status(404).json({
+                            message: "Service not found"
+                        });
+                    }
+
+                    // Verify that the selected station exists
+                    const stationSql = `
+                        SELECT id
+                        FROM stations
+                        WHERE id = ?
+                    `;
+
+                    db.query(
+                        stationSql,
+                        [stationId],
+                        (stationError, stationResults) => {
+                            if (stationError) {
+                                return res.status(500).json({
+                                    message: "Error verifying service station"
+                                });
+                            }
+
+                            if (stationResults.length === 0) {
+                                return res.status(404).json({
+                                    message: "Service station not found"
+                                });
+                            }
+
+                            // Create the booking after all validations
+                            const bookingSql = `
+                                INSERT INTO bookings
+                                (
+                                    user_id,
+                                    car_id,
+                                    service_id,
+                                    stationId,
+                                    booking_date
+                                )
+                                VALUES (?, ?, ?, ?, ?)
+                            `;
+
+                            db.query(
+                                bookingSql,
+                                [
+                                    user_id,
+                                    car_id,
+                                    service_id,
+                                    stationId,
+                                    booking_date
+                                ],
+                                (bookingError, result) => {
+                                    if (bookingError) {
+                                        console.error(
+                                            "Error creating booking:",
+                                            bookingError
+                                        );
+
+                                        return res.status(500).json({
+                                            message: "Error creating booking"
+                                        });
+                                    }
+
+                                    return res.status(201).json({
+                                        message: "Booking created successfully",
+                                        bookingId: result.insertId
+                                    });
+                                }
+                            );
+                        }
+                    );
+                }
+            );
         }
     );
-};
-const getMyBookings = (req, res) => {
-    const user_id = req.user.id;
-
-    const sql = `
-        SELECT
-            bookings.id,
-            bookings.booking_date,
-            bookings.status,
-            cars.brand,
-            cars.model,
-            cars.registration_number,
-            services.name AS service_name,
-            services.price
-        FROM bookings
-        JOIN cars ON bookings.car_id = cars.id
-        JOIN services ON bookings.service_id = services.id
-        WHERE bookings.user_id = ?
-        ORDER BY bookings.booking_date DESC
-    `;
-
-    db.query(sql, [user_id], (err, results) => {
-        if (err) {
-            return res.status(500).json({
-                message: "Error fetching bookings"
-            });
-        }
-
-        res.status(200).json({
-            bookings: results
-        });
-    });
 };
 const updateBooking = (req, res) => {
     const booking_id = req.params.id;
     const user_id = req.user.id;
-
     const { booking_date } = req.body;
 
     if (!booking_date) {
@@ -78,31 +148,60 @@ const updateBooking = (req, res) => {
         });
     }
 
-    const sql = `
-        UPDATE bookings
-        SET booking_date = ?
+    const findBookingSql = `
+        SELECT status
+        FROM bookings
         WHERE id = ? AND user_id = ?
     `;
 
     db.query(
-        sql,
-        [booking_date, booking_id, user_id],
-        (err, result) => {
-            if (err) {
+        findBookingSql,
+        [booking_id, user_id],
+        (findError, bookings) => {
+            if (findError) {
                 return res.status(500).json({
-                    message: "Error updating booking"
+                    message: "Error checking booking"
                 });
             }
 
-            if (result.affectedRows === 0) {
+            if (bookings.length === 0) {
                 return res.status(404).json({
                     message: "Booking not found"
                 });
             }
 
-            res.status(200).json({
-                message: "Booking updated successfully"
-            });
+            const currentStatus = bookings[0].status;
+
+            if (
+                currentStatus === "completed" ||
+                currentStatus === "cancelled"
+            ) {
+                return res.status(400).json({
+                    message: "Completed or cancelled bookings cannot be modified"
+                });
+            }
+
+            const updateSql = `
+                UPDATE bookings
+                SET booking_date = ?
+                WHERE id = ? AND user_id = ?
+            `;
+
+            db.query(
+                updateSql,
+                [booking_date, booking_id, user_id],
+                (updateError) => {
+                    if (updateError) {
+                        return res.status(500).json({
+                            message: "Error updating booking"
+                        });
+                    }
+
+                    res.status(200).json({
+                        message: "Booking updated successfully"
+                    });
+                }
+            );
         }
     );
 };
@@ -113,7 +212,9 @@ const cancelBooking = (req, res) => {
     const sql = `
         UPDATE bookings
         SET status = 'cancelled'
-        WHERE id = ? AND user_id = ?
+        WHERE id = ?
+        AND user_id = ?
+        AND status NOT IN ('completed', 'cancelled')
     `;
 
     db.query(
@@ -127,8 +228,8 @@ const cancelBooking = (req, res) => {
             }
 
             if (result.affectedRows === 0) {
-                return res.status(404).json({
-                    message: "Booking not found"
+                return res.status(400).json({
+                    message: "Booking cannot be cancelled or was not found"
                 });
             }
 
@@ -137,6 +238,34 @@ const cancelBooking = (req, res) => {
             });
         }
     );
+};const getMyBookings = (req, res) => {
+    const userId = req.user.id;
+
+    const sql = `
+        SELECT
+            b.*,
+            c.brand AS car_brand,
+            c.model AS car_model,
+            c.registration_number,
+            s.name AS service_name
+        FROM bookings b
+        LEFT JOIN cars c ON b.car_id = c.id
+        LEFT JOIN services s ON b.service_id = s.id
+        WHERE b.user_id = ?
+        ORDER BY b.id DESC
+    `;
+
+    db.query(sql, [userId], (error, results) => {
+        if (error) {
+            console.error("Error fetching customer bookings:", error);
+
+            return res.status(500).json({
+                message: "Error fetching bookings"
+            });
+        }
+
+        res.status(200).json(results);
+    });
 };
 
 module.exports = {

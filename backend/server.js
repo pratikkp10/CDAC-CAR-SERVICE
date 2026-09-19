@@ -11,6 +11,18 @@ const bookingRoutes = require("./routes/bookingRoutes");
 
 const adminRoutes = require("./routes/adminRoutes");
 
+const stationRoutes = require("./routes/stationRoutes");
+
+const stationServicePriceRoutes = require("./routes/stationServicePriceRoutes");
+
+const receiptRoutes = require("./routes/receiptRoutes");
+
+const messageRoutes = require("./routes/messageRoutes");
+
+const bookingHistoryRoutes = require("./routes/bookingHistoryRoutes");
+
+const superAdminRoutes = require("./routes/superAdminRoutes");
+const adminManagementRoutes = require("./routes/adminManagementRoutes");
 const db = require("./config/db");
 
 const app = express();
@@ -23,6 +35,14 @@ app.use("/api/cars", carRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/stations", stationRoutes);
+app.use("/api/station-service-prices", stationServicePriceRoutes);
+app.use("/api/receipts", receiptRoutes);
+app.use("/api/messages", messageRoutes);
+app.use("/api/booking-history", bookingHistoryRoutes);
+
+app.use("/api/superadmin", superAdminRoutes);
+app.use("/api/admin-management", adminManagementRoutes);
 app.get("/", (req, res) => {
     res.send("CDAC Car Service Backend is running!");
 });
